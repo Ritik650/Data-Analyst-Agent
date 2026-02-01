@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ title }}</title>
+<style>
+  /* Simple block layout — WeasyPrint-friendly (no flex/grid). */
+  body { font-family: Georgia, "Times New Roman", serif; color: #1a1a1a;
+         max-width: 900px; margin: 0 auto; padding: 32px 24px; line-height: 1.55; }
+  h1 { font-size: 26px; border-bottom: 3px solid #2c5f78; padding-bottom: 8px; }
+  h2 { font-size: 19px; color: #2c5f78; margin-top: 34px; }
+  h3 { font-size: 16px; margin-bottom: 4px; }
+  .meta { color: #666; font-size: 13px; margin-bottom: 24px; }
+  .problem { background: #f4f7f9; border-left: 4px solid #2c5f78; padding: 10px 14px;
+             font-style: italic; }
+  .badge { display: inline-block; font-size: 11px; font-family: Arial, sans-serif;
+           padding: 2px 8px; border-radius: 10px; vertical-align: middle; }
+  .badge.ok { background: #e2f2e5; color: #1e6b2e; }
+  .badge.warn { background: #fdeeda; color: #9a5b00; }
+  .badge.fail { background: #fbe3e3; color: #a02020; }
+  .step { border: 1px solid #ddd; border-radius: 6px; padding: 14px 18px; margin: 16px 0;
+          page-break-inside: avoid; }
+  .chart { text-align: center; margin: 12px 0; }
+  .chart img { max-width: 100%; border: 1px solid #eee; }
+  table { border-collapse: collapse; font-size: 13px; margin: 8px 0; }
+  th, td { border: 1px solid #ccc; padding: 4px 10px; text-align: left; }
+  th { background: #eef3f6; font-family: Arial, sans-serif; }
+  details { margin-top: 10px; font-size: 13px; }
+  summary { cursor: pointer; color: #2c5f78; font-family: Arial, sans-serif; }
+  pre { background: #f6f6f6; border: 1px solid #e3e3e3; padding: 10px; overflow-x: auto;
+        font-size: 12px; line-height: 1.4; white-space: pre-wrap; }
+  ul.recs li { margin-bottom: 6px; }
+  .metrics { font-size: 13px; color: #444; }
+  .footer { margin-top: 40px; font-size: 12px; color: #888; border-top: 1px solid #ddd;
+            padding-top: 10px; }
+</style>
+</head>
+<body>
+
+<h1>{{ title }}</h1>
+<p class="meta">
+  Generated {{ generated_at }} · Dataset: <strong>{{ dataset.filename }}</strong>
+  ({{ dataset.rows }} rows × {{ dataset.cols }} columns) ·
+  Grounding accuracy: <strong>{{ (metrics.grounding_accuracy * 100) | round(1) }}%</strong>
+</p>
+
+<h2>Problem Statement</h2>
+<p class="problem">{{ problem_statement }}</p>
+
+<h2>Executive Summary
+  {% if summary_grounding.ungrounded %}<span class="badge warn">contains unverified figures</span>
+  {% else %}<span class="badge ok">all figures verified</span>{% endif %}
+</h2>
+<p>{{ executive_summary }}</p>
+
+<h2>Methodology</h2>
+<p>An LLM planner decomposed the problem statement into {{ metrics.questions_total }}
+analytical questions. For each, LLM-generated pandas/matplotlib code was executed in a
+resource-limited sandbox (retrying on errors, max 3 attempts). Every numeric claim below
+was cross-checked by a critic agent against the actual code output before inclusion —
+claims that could not be traced to executed output were regenerated or flagged.</p>
+
+<h2>Findings</h2>
+{% for step in steps %}
+<div class="step">
+  <h3>{{ loop.index }}. {{ step.question }}
+    {% if not step.success %}<span class="badge fail">analysis failed</span>
+    {% elif step.grounding and step.grounding.ungrounded %}<span class="badge warn">unverified: {{ step.grounding.ungrounded | join(", ") }}</span>
+    {% else %}<span class="badge ok">verified</span>{% endif %}
+  </h3>
+
+  {% if step.success %}
+    <p>{{ step.insight }}</p>
+    {% for chart in step.charts %}
+    <div class="chart"><img src="data:image/png;base64,{{ chart.data_b64 }}" alt="{{ chart.filename }}"></div>
+    {% endfor %}
+    <details>
+      <summary>Code &amp; raw output ({{ step.attempts }} attempt{{ "s" if step.attempts != 1 }})</summary>
+      <pre>{{ step.code }}</pre>
+      <pre>{{ step.stdout }}</pre>
+    </details>
+  {% else %}
+    <p>This analysis step failed after {{ step.attempts }} attempts.</p>
+    <details><summary>Last error</summary><pre>{{ step.error }}</pre></details>
+  {% endif %}
+</div>
+{% endfor %}
+
+<h2>Recommendations</h2>
+<ul class="recs">
+  {% for rec in recommendations %}<li>{{ rec }}</li>{% endfor %}
+</ul>
+
+<h2>Dataset Overview</h2>
+<table>
+  <tr><th>Column</th><th>Type</th></tr>
+  {% for col in dataset.columns %}<tr><td>{{ col.name }}</td><td>{{ col.dtype }}</td></tr>{% endfor %}
+</table>
+
+<h2>Pipeline Metrics</h2>
+<p class="metrics">
+  Questions: {{ metrics.questions_succeeded }}/{{ metrics.questions_total }} succeeded ·
+  First-pass code success rate: {{ (metrics.first_pass_success_rate * 100) | round(1) }}% ·
+  With retry loop: {{ (metrics.final_success_rate * 100) | round(1) }}% ·
+  Total coder attempts: {{ metrics.total_coder_attempts }} ·
+  Numeric claims verified: {{ metrics.claims_grounded }}/{{ metrics.claims_total }}
+</p>
+
+<div class="footer">
+  AI Data-Analyst Agent — every figure in this report was checked against real executed
+  code output before inclusion. Flagged figures could not be automatically verified.
+</div>
+
+</body>
+</html>

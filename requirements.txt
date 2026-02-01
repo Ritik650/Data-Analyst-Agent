@@ -1,0 +1,7 @@
+# Slim dependencies for the API layer only (deployed to Vercel serverless).
+# The worker / local full-stack install uses requirements-worker.txt.
+fastapi>=0.110
+uvicorn>=0.29
+celery>=5.3
+redis>=5.0
+python-multipart>=0.0.9

@@ -1,0 +1,34 @@
+{
+  "sales.csv": {
+    "domain": "Sales",
+    "problem": "Which regions and months drive revenue, and how do discounts affect units sold? Recommend where to focus next quarter's sales push."
+  },
+  "healthcare.csv": {
+    "domain": "Healthcare",
+    "problem": "What patient factors are associated with higher blood pressure and 30-day readmission? Suggest which patient groups need closer monitoring."
+  },
+  "sports.csv": {
+    "domain": "Sports",
+    "problem": "How does playing time relate to goals and assists across positions, and does age matter? Identify the most productive player profiles."
+  },
+  "finance.csv": {
+    "domain": "Finance",
+    "problem": "What separates borrowers who default from those who repay? Quantify the role of credit score and income, and propose lending criteria."
+  },
+  "retail.csv": {
+    "domain": "Retail",
+    "problem": "Compare basket value across store types and categories, and assess whether membership changes spending or returns. Recommend a growth lever."
+  },
+  "hr.csv": {
+    "domain": "HR",
+    "problem": "What drives attrition in this workforce? Examine salary, tenure, overtime and performance, and recommend retention actions."
+  },
+  "energy.csv": {
+    "domain": "Energy",
+    "problem": "How does temperature drive electricity consumption, and what seasonal pattern does solar generation follow? Advise on capacity planning."
+  },
+  "education.csv": {
+    "domain": "Education",
+    "problem": "How strongly do study hours and attendance predict final scores across school types? Recommend the highest-impact intervention."
+  }
+}

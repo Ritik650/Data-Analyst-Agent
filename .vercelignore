@@ -1,0 +1,9 @@
+tests/
+eval/
+results/
+.github/
+Dockerfile.api
+Dockerfile.worker
+docker-compose.yml
+requirements-worker.txt
+projectplan.md

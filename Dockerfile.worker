@@ -1,0 +1,28 @@
+# Worker container — Celery + full pipeline + WeasyPrint system libraries.
+# Also usable as the Dockerfile of a Hugging Face Docker Space (serves a tiny
+# health endpoint on $PORT so the Space registers as running).
+FROM python:3.12-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf-2.0-0 \
+        libffi8 shared-mime-info fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY requirements.txt requirements-worker.txt ./
+RUN pip install --no-cache-dir -r requirements-worker.txt
+
+COPY config.py .
+COPY agents/ agents/
+COPY sandbox/ sandbox/
+COPY report/ report/
+COPY api/ api/
+COPY worker/ worker/
+
+# Run as an unprivileged user — one more layer for the subprocess sandbox.
+RUN useradd -m runner && chown -R runner:runner /app
+USER runner
+
+ENV PORT=7860
+EXPOSE 7860
+CMD ["sh", "worker/entrypoint.sh"]
