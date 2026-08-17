@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="./data-analyst-agent-banner.svg" alt="AI Data-Analyst Agent" width="100%"/>
+</p>
+
 # AI Data-Analyst Agent
 
 **Dataset + natural-language problem statement → grounded analytical report (HTML/PDF), where every number is traceable to real executed code — not LLM-hallucinated.**
@@ -6,36 +10,24 @@ Most "LLM writes an EDA summary" projects let the model invent statistics. This 
 
 ---
 
-## Architecture
+## 🗺️ Architecture
 
-```
-            POST /analyze (dataset + problem)          returns job_id immediately
-                          │
-             ┌────────────▼─────────────┐
-             │  FastAPI (Vercel         │   GET /status/{job_id}   → progress
-             │  serverless)             │   GET /report/{job_id}   → HTML/PDF/JSON
-             └────────────┬─────────────┘
-                          │ Celery send_task
-             ┌────────────▼─────────────┐
-             │  Upstash Redis            │  broker + job state + report blobs (TTL)
-             └────────────┬─────────────┘
-                          │
-             ┌────────────▼───────────────────────────────────────────┐
-             │  Celery worker (Hugging Face Docker Space / any host)  │
-             │                                                        │
-             │  Planner ──► plan (structured JSON, 3-5 questions)     │
-             │     │                                                  │
-             │  Coder ───► pandas/matplotlib code ──► SANDBOX         │
-             │     ▲                │  subprocess: rlimits, timeout,  │
-             │     └── error ◄──────┘  no network, import allowlist   │
-             │         (retry ≤3)                                     │
-             │     │                                                  │
-             │  Critic ──► insight prose ──► verify every number      │
-             │     ▲                          against real stdout     │
-             │     └── ungrounded claims ◄────┘ (regenerate ≤2)       │
-             │     │                                                  │
-             │  Report ──► Jinja2 → HTML → PDF (WeasyPrint)           │
-             └────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    Client["POST /analyze<br/>dataset + problem"] --> API
+
+    API["FastAPI (Vercel serverless)<br/>GET /status/{job_id} &#183; GET /report/{job_id}"] -->|Celery send_task| Redis[("Upstash Redis<br/>broker + job state + report blobs (TTL)")]
+    Redis --> Worker
+
+    subgraph Worker["Celery worker (Hugging Face Docker Space / any host)"]
+        Planner["Planner<br/>plan (structured JSON, 3-5 questions)"] --> Coder
+        Coder["Coder<br/>pandas/matplotlib code"] --> Sandbox
+        Sandbox["Sandbox<br/>subprocess: rlimits, timeout,<br/>no network, import allowlist"] -->|error, retry &#8804;3| Coder
+        Sandbox --> Critic
+        Critic["Critic<br/>verify every number vs real stdout"] -->|ungrounded, regenerate &#8804;2| Coder
+        Critic --> Report
+        Report["Report<br/>Jinja2 &#8594; HTML &#8594; PDF (WeasyPrint)"]
+    end
 ```
 
 The orchestrator is a hand-rolled explicit state machine ([agents/orchestrator.py](agents/orchestrator.py)) — plan → code (retry loop) → ground-check (regenerate loop) → summarize (ground-check again) → render.
@@ -70,7 +62,7 @@ Submit a job:
 # 1) enqueue
 curl -s -X POST http://localhost:8000/analyze \
   -F "file=@eval/test_datasets/sales.csv" \
-  -F "problem=Which regions and months drive revenue? Recommend where to focus." 
+  -F "problem=Which regions and months drive revenue? Recommend where to focus."
 # -> {"job_id": "abc123...", "poll": "/status/abc123...", ...}
 
 # 2) poll
@@ -98,27 +90,34 @@ celery -A worker.tasks worker --loglevel=info --pool=solo   # terminal 2 (--pool
 ## Deployment (free tier)
 
 ### 1. Upstash Redis
+
 1. Create a free database at [upstash.com](https://upstash.com) → copy the `rediss://default:...@....upstash.io:6379` URL.
 
 ### 2. Worker → Hugging Face Docker Space
+
 1. Create a new **Docker** Space at [huggingface.co/spaces](https://huggingface.co/spaces) (free CPU basic).
 2. Push this repo's contents to the Space, renaming `Dockerfile.worker` → `Dockerfile` (HF expects it at the root):
-   ```bash
-   cp Dockerfile.worker Dockerfile && git add Dockerfile && git push space main
-   ```
+
+```bash
+cp Dockerfile.worker Dockerfile && git add Dockerfile && git push space main
+```
+
 3. In Space **Settings → Variables and secrets**, set `GEMINI_API_KEY` and `REDIS_URL` (the Upstash URL).
 4. The Space serves a trivial health page on port 7860 while the Celery worker runs in the foreground. Note: free Spaces pause after ~48h without traffic — a free cron ping (e.g. [cron-job.org](https://cron-job.org)) keeps it warm.
 
 ### 3. API → Vercel
+
 ```bash
 npm i -g vercel
 vercel                        # from the repo root — vercel.json routes everything to api/index.py
 vercel env add REDIS_URL      # the same Upstash URL
 vercel --prod
 ```
+
 The Vercel bundle installs only the slim [requirements.txt](requirements.txt); heavy pipeline deps never ship to serverless (the worker imports them lazily inside the task).
 
 ### 4. CI
+
 GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs the test suite on every push/PR. Vercel's GitHub integration can be set to deploy only on green checks.
 
 ---
@@ -154,7 +153,7 @@ The **grounding audit** is deliberately independent: it re-extracts every number
 
 ## Security: the sandbox tradeoff (stated honestly)
 
-Docker-per-run isolation is the correct production answer; it doesn't fit free-tier compute. The deployed version substitutes **subprocess sandboxing** ([sandbox/](sandbox/)) with these layers:
+Docker-per-run isolation is the correct production answer; it doesn't fit free-tier compute. The deployed version substitutes **subprocess sandboxing** ([sandbox/](sandbox)) with these layers:
 
 1. **`resource.setrlimit`** memory (RLIMIT_AS) and CPU caps (POSIX; the worker always runs on Linux)
 2. **Hard wall-clock timeout** enforced by the parent process
@@ -168,26 +167,29 @@ Docker-per-run isolation is the correct production answer; it doesn't fit free-t
 
 ---
 
-## Project structure
+## 🗂️ Project structure
 
-```
-├── agents/
-│   ├── planner.py        # problem + schema → structured JSON plan
-│   ├── coder.py          # writes pandas/matplotlib code, retries on errors (≤3)
-│   ├── critic.py         # grounding: verify every number vs stdout, regenerate (≤2)
-│   ├── orchestrator.py   # explicit state machine tying it together
-│   └── llm.py            # Gemini API wrapper (structured JSON output + rate-limit backoff)
-├── sandbox/
-│   ├── executor.py       # parent: subprocess spawn, timeout, chart collection
-│   └── runner.py         # child harness: rlimits, no-network, import allowlist
-├── report/               # Jinja2 → HTML → PDF (WeasyPrint)
-├── api/                  # FastAPI + Celery producer + Redis storage (Vercel-deployable)
-├── worker/               # Celery consumer task + HF Space entrypoint
-├── eval/                 # dataset generator, generalization eval, grounding audit
-├── tests/                # sandbox security, grounding logic, report rendering
-├── vercel.json           # Vercel routing → api/index.py
-├── Dockerfile.api / Dockerfile.worker / docker-compose.yml
-└── .github/workflows/ci.yml
+```mermaid
+graph TD
+    Root["Data-Analyst-Agent/"]
+    Root --> Agents["agents/"]
+    Agents --> Planner["planner.py — problem + schema → structured JSON plan"]
+    Agents --> Coder["coder.py — writes pandas/matplotlib code, retries on errors (&#8804;3)"]
+    Agents --> Critic["critic.py — grounding: verify every number vs stdout, regenerate (&#8804;2)"]
+    Agents --> Orchestrator["orchestrator.py — explicit state machine tying it together"]
+    Agents --> LLM["llm.py — Gemini API wrapper (structured JSON, rate-limit backoff)"]
+
+    Root --> Sandbox["sandbox/"]
+    Sandbox --> Executor["executor.py — parent: subprocess spawn, timeout, chart collection"]
+    Sandbox --> Runner["runner.py — child harness: rlimits, no-network, import allowlist"]
+
+    Root --> Report["report/ — Jinja2 &#8594; HTML &#8594; PDF (WeasyPrint)"]
+    Root --> API["api/ — FastAPI + Celery producer + Redis storage (Vercel-deployable)"]
+    Root --> WorkerDir["worker/ — Celery consumer task + HF Space entrypoint"]
+    Root --> Eval["eval/ — dataset generator, generalization eval, grounding audit"]
+    Root --> Tests["tests/ — sandbox security, grounding logic, report rendering"]
+    Root --> Config["vercel.json, Dockerfile.api, Dockerfile.worker, docker-compose.yml"]
+    Root --> CI[".github/workflows/ci.yml"]
 ```
 
 ## Known limitations & future work
